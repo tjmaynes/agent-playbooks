@@ -53,7 +53,24 @@ make deploy          # Deploy both
 
 On first deploy, the claude role generates an SSH key for its service user and prints the public key. Add it to the appropriate GitHub account under Settings > SSH and GPG keys.
 
-### 6. Discord bot setup (athena)
+### 6. Start Claude Code (athena)
+
+Start a Claude Code session with Discord integration:
+
+```bash
+make connect_athena
+# Then inside the tmux session:
+start-claude
+```
+
+Or as a one-liner:
+
+```bash
+ssh -t athena "sudo -iu claude start-claude"
+```
+
+### 7. Discord bot setup (athena)
+
 The Claude Code server on athena uses the [Discord plugin](https://github.com/anthropics/claude-plugins-official/blob/main/external_plugins/discord/README.md). After deploy, complete these one-time steps:
 
 **a. Create a Discord application and bot**
@@ -76,20 +93,11 @@ Navigate to **OAuth2** > **URL Generator**. Select the `bot` scope and enable th
 
 Set integration type to **Guild Install**, copy the generated URL, and add the bot to your server.
 
-**d. Deploy and verify**
+**d. Deploy and start**
 
 ```bash
 make deploy_claude
-```
-
-SSH into athena and verify the service is running:
-
-```bash
-ssh athena
-sudo -iu athena
-export XDG_RUNTIME_DIR=/run/user/$(id -u)
-systemctl --user status claude-code
-journalctl --user -u claude-code -f
+ssh -t athena "sudo -iu claude start-claude"
 ```
 
 **e. Pair your Discord account**
@@ -125,6 +133,7 @@ Once paired, switch to allowlist mode so strangers can't trigger pairing:
 | `make decrypt` | Decrypt the vault file |
 | `make start_helios` | Start Helios VM |
 | `make start_athena` | Start Athena VM |
+| `make connect_athena` | SSH into athena as claude user in tmux |
 
 ## Architecture
 
@@ -132,22 +141,16 @@ Two playbooks provision different server groups:
 
 **`playbooks/deploy-openclaw.yml`** (openclaw_servers — helios):
 1. **`openclaw.installer.openclaw`** — official collection handling Node.js, pnpm, Docker, OpenClaw, systemd, UFW, fail2ban, and unattended-upgrades
-2. **`debian`** — base packages, SSH server, service user creation, timezone, unattended-upgrades
+2. **`debian`** — base packages (including `gh`), SSH server, service user creation, timezone, unattended-upgrades
 3. **`tailscale`** — joins the VM to a Tailscale tailnet and locks down access
 4. **`mise`** — installs polyglot runtimes (Node, Python, Go, direnv, just)
 5. **`openclaw`** — configures the daemon, Discord integration, and environment variables
 
 **`playbooks/deploy-claude.yml`** (claude_servers — athena):
-1. **`debian`** — base packages, SSH server, service user creation, timezone, unattended-upgrades
-2. **`security`** — UFW firewall (SSH allowed first, then deny-by-default), fail2ban (5 attempts → 1-hour ban)
-3. **`docker`** — Docker CE with Compose V2, DOCKER-USER chain to prevent UFW bypass
+1. **`debian`** — base packages (including `gh`), SSH server, service user creation, timezone, unattended-upgrades
+2. **`security`** — SSH hardening (key-only, no root login), UFW firewall (rate-limited SSH, deny-by-default), fail2ban (24h progressive bans)
+3. **`docker`** — rootless Docker running under the service user (no docker group escalation)
 4. **`mise`** — installs runtimes including bun (configured per-host)
-5. **`claude`** — installs Claude Code, adds Anthropic plugin marketplace, installs Discord plugin, configures systemd service, mise shell activation, and SSH-based GitHub access
+5. **`claude`** — scoped sudoers, Claude Code install, Anthropic plugin marketplace, Discord plugin, systemd service template, mise/env activation in bashrc, `start-claude` tmux helper, and SSH-based GitHub access
 
-Roles are parameterized via host variables in `inventory/hosts.yml`:
-- `openclaw_user` — controls which OS user the openclaw role operates as
-- `claude_user` — controls which OS user the claude role operates as
-- `debian_user` — controls service user creation in the debian role
-- `mise_user` — controls which user gets mise runtimes
-- `discord_bot_token` — per-host bot token (mapped from vault)
-- Git credentials for athena (`athena_git_user_name`, `athena_git_user_email`) are stored in the vault
+Roles are parameterized via host variables in `inventory/hosts.yml`. User variables reference vault-backed defaults (`openclaw_default_user` / `claude_default_user`). Discord bot tokens and git credentials are per-host, mapped from vault variables.
