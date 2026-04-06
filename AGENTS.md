@@ -2,24 +2,25 @@
 
 ## Project overview
 
-Ansible project that provisions AI agent servers on ARM64 Ubuntu Server VMs managed by [lume](https://github.com/trycua/lume). Currently manages two servers: **helios** (OpenClaw gateway) and **athena** (Claude Code server).
+Ansible project that provisions Hermes Agent servers on ARM64 Ubuntu Server VMs managed by [lume](https://github.com/trycua/lume). Currently manages two hosts: **rosie** and **athena**. A single playbook (`deploy.yml`) deploys to any host using `--limit`.
 
 ## Structure
 
 ```
 playbooks/
-  deploy-openclaw.yml     # OpenClaw deployment (openclaw_servers)
-  deploy-claude.yml       # Claude server deployment (claude_servers)
+  deploy.yml                # Hermes Agent deployment (all hosts)
+  deploy.openclaw.example.yml  # OpenClaw deployment example (commented out)
+  deploy.claude.example.yml    # Claude deployment example (commented out)
 roles/
-  debian/                 # Base packages, SSH, GitHub CLI, service user creation, unattended-upgrades
-  security/               # SSH hardening, UFW firewall (rate-limited SSH, deny-by-default), fail2ban
-  docker/                 # Rootless Docker (per-user daemon, no root access)
-  openclaw/               # Daemon setup, Discord integration, env vars
-  tailscale/              # Tailnet join, firewall rules, binary permissions
+  debian/                 # Base packages, SSH, GitHub CLI, service user creation, unattended-upgrades, custom DNS, git config
+    templates/
+      resolved-custom.conf.j2  # systemd-resolved drop-in for split DNS
+  security/               # SSH hardening, UFW firewall, fail2ban, custom CA certificate (system + Chromium NSS)
+  docker/                 # Rootless Docker (per-user daemon, no root access), Honcho docker-compose
   mise/                   # Runtime installer (Node, Python, Go, bun, etc.)
-  claude/                 # Claude Code, Discord plugin, sudoers, systemd, SSH/GitHub, tmux helper
+  hermes/                 # Hermes Agent install, Playwright, Discord gateway, sudoers, systemd, .env, SSH/GitHub
 vars/
-  common.yml              # Shared variables
+  common.yml              # Shared variables and defaults
   vault.yml               # Encrypted secrets (ansible-vault)
 inventory/hosts.yml       # Host definitions with per-host variables
 scripts/
@@ -28,20 +29,22 @@ scripts/
 
 ## Key conventions
 
-- Two playbooks: `deploy-openclaw.yml` for openclaw_servers, `deploy-claude.yml` for claude_servers
+- One playbook (`deploy.yml`) targets all hosts; use `--limit <host>` to deploy individually
+- Hosts are defined flat under `all.hosts` in inventory — no group hierarchy needed
+- Per-host variables (secrets, model config, optional features) are in inventory/vault; shared config (users, ports, API keys) is in play-level vars
 - System-level tasks run as root (`become: true` at play level)
-- Host variables use vault-backed defaults: `openclaw_default_user` / `claude_default_user` for all role user params
-- The `debian` role creates the service user (skips if already exists), installs base packages including `gh`, and configures SSH + unattended-upgrades
-- The `security` role hardens SSH (key-only auth, no root login), rate-limits SSH via UFW, and configures fail2ban (24h bans, progressive)
-- The `docker` role runs Docker in rootless mode under the service user — no docker group escalation
-- The `claude` role manages scoped sudoers (claude-code.service only), Claude Code install, Discord plugin, systemd service template, SSH/GitHub keys, mise/env activation in bashrc, and a `start-claude` tmux helper function
+- The `debian` role creates the service user (skips if already exists), installs base packages including `gh`, configures SSH + unattended-upgrades, optionally configures custom DNS via `systemd-resolved` split DNS (when `custom_dns_server` is defined), and optionally sets git identity
+- The `security` role hardens SSH (key-only auth, no root login), rate-limits SSH via UFW, configures fail2ban (24h bans, progressive), and optionally installs a custom CA certificate to the system trust store and Chromium NSS database (when `custom_ca_certificate_path` is defined)
+- The `docker` role runs Docker in rootless mode under the service user — no docker group escalation. Also deploys Honcho (memory backend) via docker-compose template
+- The `hermes` role manages scoped sudoers (hermes-gateway.service only), Hermes Agent install (official curl installer), Playwright browser install (`npx playwright install --with-deps`), Discord gateway config, `.env` file with per-host environment variables (including optional `GITHUB_TOKEN`, `HASS_URL`/`HASS_TOKEN`), systemd service via `hermes gateway install`, SSH/GitHub keys, mise/env activation in bashrc, and a `hermes-logs` helper function
 - Secrets are stored in `vars/vault.yml` and encrypted with `ansible-vault`
-- Discord bot tokens are per-host: defined as `helios_bot_token` / `athena_bot_token` in vault, mapped to `discord_bot_token` per-host in inventory
-- Git user credentials for athena are stored in vault (`athena_git_user_name`, `athena_git_user_email`), mapped to `git_user_name`/`git_user_email` per-host
-- SSH keys for GitHub access are generated on-server (never committed) — managed by the `claude` role
-- The systemd service unit for claude-code is a Jinja2 template (`roles/claude/templates/claude-code.service.j2`)
+- Discord bot tokens are per-host: defined as `rosie_bot_token` / `athena_bot_token` in vault, mapped to `discord_bot_token` per-host in inventory
+- Optional features are conditionally enabled via `when: <var> is defined` — including custom CA certs, custom DNS, GitHub tokens, and Home Assistant integration
+- SSH keys for GitHub access are generated on-server (never committed) — managed by the `hermes` role
 - All tasks must be idempotent — safe to re-run without side effects
 - VM creation via `scripts/setup-vm.sh` is idempotent — skips if VM already exists
+- Named setup targets: `make setup_rosie` (4GB RAM, 60GB disk), `make setup_athena` (8GB RAM, 110GB disk)
+- Generic setup: `make setup HOST=<name>` creates a VM with default 8GB RAM / 110GB disk
 
 ## Secrets
 

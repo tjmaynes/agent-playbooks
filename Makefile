@@ -3,34 +3,32 @@
 ACTIVATE := source .venv/bin/activate
 PLAYBOOK := $(ACTIVATE) && ansible-playbook -i inventory/hosts.yml --ask-become-pass
 
-.PHONY: help install setup deploy_openclaw deploy_claude deploy check lint encrypt decrypt start_helios start_athena
+.PHONY: help install setup deploy check lint encrypt decrypt start connect
 
 help: ## Show available commands
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 install: ## Install Ansible and dependencies
 	python3 -m venv .venv
 	$(ACTIVATE) && pip install -r requirements.txt
 	$(ACTIVATE) && ansible-galaxy collection install -r collections/requirements.yml -p collections
 
-setup_helios: ## Create helios VM
-	./scripts/setup-vm.sh "helios" --memory "4GB" --disk-size "60GB"
+setup_rosie: ## Create the rosie VM
+	./scripts/setup-vm.sh "rosie" --memory "4GB" --disk-size "60GB" --iso="./ubuntu-24.04.4-live-server-amd64.iso"
 
-setup_athena: ## Create athena VM
-	./scripts/setup-vm.sh "athena"
+setup_athena: ## Create the athena VM
+	./scripts/setup-vm.sh "athena" --memory "8GB" --disk-size "110GB" --iso="./ubuntu-24.04.4-live-server-amd64.iso"
 
-deploy_openclaw: ## Deploy OpenClaw to server
-	$(PLAYBOOK) playbooks/deploy-openclaw.yml
+setup: ## Create a VM (usage: make setup HOST=some-host)
+	./scripts/setup-vm.sh "$(HOST)" --memory "8GB" --disk-size "110GB"
 
-deploy_claude: ## Deploy Claude server
-	$(PLAYBOOK) playbooks/deploy-claude.yml
+deploy: ## Deploy to a host (usage: make deploy HOST=rosie)
+	$(PLAYBOOK) playbooks/deploy.yml --limit $(HOST)
 
-deploy: deploy_openclaw deploy_claude
+check: ## Dry-run deploy (usage: make check HOST=rosie)
+	$(PLAYBOOK) playbooks/deploy.yml --limit $(HOST) --check --diff
 
-check: ## Dry-run to preview changes
-	$(PLAYBOOK) playbooks/deploy-openclaw.yml --check --diff
-
-lint: ## Lint playbook and roles
+lint: ## Lint playbooks and roles
 	$(ACTIVATE) && ansible-lint playbooks/*.yml
 
 encrypt: ## Encrypt the vault file
@@ -39,11 +37,8 @@ encrypt: ## Encrypt the vault file
 decrypt: ## Decrypt the vault file
 	$(ACTIVATE) && ansible-vault decrypt vars/vault.yml
 
-start_helios: ## Start Helios VM
-	lume run helios --no-display
+start: ## Start a VM (usage: make start HOST=rosie)
+	lume run $(HOST) --no-display
 
-start_athena: ## Start Athena VM
-	lume run athena --no-display
-
-connect_athena:
-	ssh -t athena "sudo -iu claude tmux new-session -s claude-session"
+connect: ## SSH into a host in tmux (usage: make connect HOST=rosie)
+	ssh -t $(HOST) "sudo -iu hermes tmux new-session -s remote-$(HOST)-session"

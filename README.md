@@ -1,13 +1,6 @@
-# agent-server
+# agent-playbooks
 
-> AI agent servers running on ARM64 Ubuntu Server VMs, provisioned via Ansible and managed by [lume](https://github.com/trycua/lume).
-
-## Servers
-
-| Name | Group | Roles | Purpose |
-|------|-------|-------|---------|
-| **helios** | `openclaw_servers` | openclaw.installer, debian, tailscale, mise, openclaw | OpenClaw personal assistant gateway with Discord integration |
-| **athena** | `claude_servers` | debian, security, docker, mise, claude | Claude Code server with Discord integration |
+> Ansible playbooks for provisioning agent servers — including [Hermes Agent](https://hermes-agent.nousresearch.com/), [OpenClaw](https://openclaw.org/), and [Claude Code](https://claude.ai/code) — on ARM64 Ubuntu Server VMs managed by [lume](https://github.com/trycua/lume).
 
 ## Requirements
 
@@ -20,9 +13,8 @@
 ### 1. Create VMs
 
 ```bash
-make setup_helios    # Create helios VM (4GB RAM, 60GB disk)
+make setup_rosie     # Create rosie VM (4GB RAM, 60GB disk)
 make setup_athena    # Create athena VM (8GB RAM, 110GB disk)
-make setup           # Create both
 ```
 
 This runs `scripts/setup-vm.sh` which creates the lume VM and boots the Ubuntu installer. The script is idempotent — it skips creation if the VM already exists.
@@ -37,41 +29,46 @@ make install
 
 ```bash
 make decrypt
-# Edit vars/vault.yml with real values
+# Edit vars/vault.yml with real values (IPs, bot tokens)
 make encrypt
 ```
 
 ### 4. Deploy
 
 ```bash
-make deploy_openclaw # Deploy OpenClaw (helios)
-make deploy_claude   # Deploy Claude server (athena)
-make deploy          # Deploy both
+make deploy HOST=rosie    # Deploy to rosie
+make deploy HOST=athena   # Deploy to athena
 ```
 
-### 5. Post-deploy
+### 5. Post-deploy setup
 
-On first deploy, the claude role generates an SSH key for its service user and prints the public key. Add it to the appropriate GitHub account under Settings > SSH and GPG keys.
+On first deploy, the hermes role generates an SSH key and prints the public key. Add it to the appropriate GitHub account under Settings > SSH and GPG keys.
 
-### 6. Start Claude Code (athena)
-
-Start a Claude Code session with Discord integration:
+Then SSH in and complete interactive setup:
 
 ```bash
-make connect_athena
-# Then inside the tmux session:
-start-claude
+make connect HOST=rosie
+# Inside the tmux session:
+hermes setup          # Authenticate with Nous Portal (OAuth)
+hermes model          # Select AI model
+hermes memory setup   # Configure Honcho memory backend
 ```
 
-Or as a one-liner:
+Start the gateway (systemd service is installed during deploy):
 
 ```bash
-ssh -t athena "sudo -iu claude start-claude"
+hermes gateway start
 ```
 
-### 7. Discord bot setup (athena)
+Tail the gateway logs:
 
-The Claude Code server on athena uses the [Discord plugin](https://github.com/anthropics/claude-plugins-official/blob/main/external_plugins/discord/README.md). After deploy, complete these one-time steps:
+```bash
+hermes-logs
+```
+
+### 6. Discord bot setup
+
+Each host needs its own Discord bot. For each host:
 
 **a. Create a Discord application and bot**
 
@@ -79,7 +76,7 @@ Go to the [Discord Developer Portal](https://discord.com/developers/applications
 
 **b. Generate a bot token**
 
-On the **Bot** page, click **Reset Token** and copy it. Store it in `vars/vault.yml` as `athena_bot_token`, then run `make encrypt`.
+On the **Bot** page, click **Reset Token** and copy it. Store it in `vars/vault.yml` as `<host>_bot_token` (e.g., `rosie_bot_token`), then run `make encrypt`.
 
 **c. Invite the bot to a server**
 
@@ -93,27 +90,14 @@ Navigate to **OAuth2** > **URL Generator**. Select the `bot` scope and enable th
 
 Set integration type to **Guild Install**, copy the generated URL, and add the bot to your server.
 
-**d. Deploy and start**
+**d. Deploy and configure**
 
 ```bash
-make deploy_claude
-ssh -t athena "sudo -iu claude start-claude"
-```
-
-**e. Pair your Discord account**
-
-DM your bot on Discord — it replies with a pairing code. In the Claude Code session on athena:
-
-```
-/discord:access pair <code>
-```
-
-**f. Lock down access**
-
-Once paired, switch to allowlist mode so strangers can't trigger pairing:
-
-```
-/discord:access policy allowlist
+make deploy HOST=rosie
+make connect HOST=rosie
+# Inside the tmux session:
+hermes gateway setup   # Configure Discord platform
+hermes gateway start
 ```
 
 ## Available Commands
@@ -121,36 +105,37 @@ Once paired, switch to allowlist mode so strangers can't trigger pairing:
 | Command | Purpose |
 |---|---|
 | `make install` | Install Ansible, ansible-lint, and collections |
-| `make setup_helios` | Create helios VM |
-| `make setup_athena` | Create athena VM |
-| `make setup` | Create both VMs |
-| `make deploy_openclaw` | Deploy OpenClaw to helios |
-| `make deploy_claude` | Deploy Claude server to athena |
-| `make deploy` | Deploy both servers |
-| `make check` | Dry-run to preview changes |
+| `make setup_rosie` | Create rosie VM (4GB RAM, 60GB disk) |
+| `make setup_athena` | Create athena VM (8GB RAM, 110GB disk) |
+| `make setup HOST=<name>` | Create a custom VM (8GB RAM, 110GB disk) |
+| `make deploy HOST=<name>` | Deploy to a host |
+| `make check HOST=<name>` | Dry-run to preview changes |
 | `make lint` | Lint playbooks and roles |
 | `make encrypt` | Encrypt the vault file |
 | `make decrypt` | Decrypt the vault file |
-| `make start_helios` | Start Helios VM |
-| `make start_athena` | Start Athena VM |
-| `make connect_athena` | SSH into athena as claude user in tmux |
+| `make start HOST=<name>` | Start a VM |
+| `make connect HOST=<name>` | SSH into a host as hermes user in tmux |
 
 ## Architecture
 
-Two playbooks provision different server groups:
+A single playbook (`playbooks/deploy.yml`) provisions all hosts with the same role chain:
 
-**`playbooks/deploy-openclaw.yml`** (openclaw_servers — helios):
-1. **`openclaw.installer.openclaw`** — official collection handling Node.js, pnpm, Docker, OpenClaw, systemd, UFW, fail2ban, and unattended-upgrades
-2. **`debian`** — base packages (including `gh`), SSH server, service user creation, timezone, unattended-upgrades
-3. **`tailscale`** — joins the VM to a Tailscale tailnet and locks down access
-4. **`mise`** — installs polyglot runtimes (Node, Python, Go, direnv, just)
-5. **`openclaw`** — configures the daemon, Discord integration, and environment variables
+1. **`debian`** — base packages (including `gh`), SSH server, service user creation, timezone, unattended-upgrades, custom DNS (optional, via `systemd-resolved` split DNS), git config
+2. **`security`** — SSH hardening (key-only, no root login), UFW firewall (rate-limited SSH, deny-by-default), fail2ban (24h progressive bans), custom CA certificate management (system trust store + Chromium NSS database)
+3. **`docker`** — rootless Docker running under the service user (no docker group escalation), Honcho memory backend via docker-compose
+4. **`mise`** — installs runtimes (Node, Python, Go, direnv, just)
+5. **`hermes`** — scoped sudoers, Hermes Agent install (official curl installer), Playwright browser install, Discord gateway config, systemd service via `hermes gateway install`, environment file (`.env`) with per-host config, mise/env activation in bashrc, `hermes-logs` helper, and SSH-based GitHub access
 
-**`playbooks/deploy-claude.yml`** (claude_servers — athena):
-1. **`debian`** — base packages (including `gh`), SSH server, service user creation, timezone, unattended-upgrades
-2. **`security`** — SSH hardening (key-only, no root login), UFW firewall (rate-limited SSH, deny-by-default), fail2ban (24h progressive bans)
-3. **`docker`** — rootless Docker running under the service user (no docker group escalation)
-4. **`mise`** — installs runtimes including bun (configured per-host)
-5. **`claude`** — scoped sudoers, Claude Code install, Anthropic plugin marketplace, Discord plugin, systemd service template, mise/env activation in bashrc, `start-claude` tmux helper, and SSH-based GitHub access
+Hosts are defined flat in `inventory/hosts.yml` with per-host variables. Shared configuration lives in play-level vars in the playbook. Per-host secrets come from vault. Deploy one host at a time with `--limit`.
 
-Roles are parameterized via host variables in `inventory/hosts.yml`. User variables reference vault-backed defaults (`openclaw_default_user` / `claude_default_user`). Discord bot tokens and git credentials are per-host, mapped from vault variables.
+### Optional per-host features
+
+Some features are conditionally enabled based on whether the host defines certain variables:
+
+| Variable | Effect |
+|---|---|
+| `custom_ca_certificate_path` | Installs CA cert to system trust store and Chromium NSS database |
+| `custom_dns_server` / `custom_dns_domain` | Configures split DNS via `systemd-resolved` |
+| `github_token` | Adds `GITHUB_TOKEN` and `GH_TOKEN` to hermes `.env` |
+| `home_assistant_url` / `home_assistant_token` | Adds `HASS_URL` and `HASS_TOKEN` to hermes `.env` |
+| `git_user_name` / `git_user_email` | Configures git identity for the service user |

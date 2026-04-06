@@ -22,6 +22,7 @@
       - openssh-server
       - vim
       - tmux
+      - htop
     state: present
     update_cache: true
 
@@ -97,3 +98,37 @@
       Unattended-Upgrade::Remove-Unused-Dependencies "true";
       Unattended-Upgrade::Automatic-Reboot "false";
     mode: "0644"
+
+- name: Ensure resolved drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+    mode: "0755"
+  when: custom_dns_server is defined
+
+- name: Configure custom DNS server
+  ansible.builtin.template:
+    src: resolved-custom.conf.j2
+    dest: /etc/systemd/resolved.conf.d/custom-dns.conf
+    mode: "0644"
+  when: custom_dns_server is defined
+  notify:
+    - Restart systemd-resolved
+
+- name: Configure git user name
+  community.general.git_config:
+    name: user.name
+    value: "{{ git_user_name }}"
+    scope: global
+  become: true
+  become_user: "{{ debian_user }}"
+  when: git_user_name is defined
+
+- name: Configure git user email
+  community.general.git_config:
+    name: user.email
+    value: "{{ git_user_email }}"
+    scope: global
+  become: true
+  become_user: "{{ debian_user }}"
+  when: git_user_email is defined

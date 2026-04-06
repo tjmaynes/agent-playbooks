@@ -14,6 +14,14 @@ openclaw_ssh_keys: []
 # Claude server
 claude_default_user: "claude"
 
+# Hermes server
+hermes_default_user: "hermes"
+
+# Honcho defaults
+honcho_api_port: 8000
+honcho_db_name: "honcho"
+honcho_db_user: "honcho"
+
 # Mise runtime versions
 mise_node_version: "24.14.0"
 mise_python_version: "3.14.3"

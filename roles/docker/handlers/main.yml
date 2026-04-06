@@ -9,3 +9,14 @@
   environment:
     XDG_RUNTIME_DIR: "/run/user/{{ docker_user_uid.stdout }}"
     DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ docker_user_uid.stdout }}/bus"
+
+- name: Restart docker services # noqa: no-changed-when
+  ansible.builtin.command:
+    cmd: docker compose up -d --force-recreate
+    chdir: /home/{{ docker_user }}/docker
+  become: true
+  become_user: "{{ docker_user }}"
+  environment:
+    HOME: /home/{{ docker_user }}
+    XDG_RUNTIME_DIR: "/run/user/{{ docker_user_uid.stdout }}"
+    DOCKER_HOST: "unix:///run/user/{{ docker_user_uid.stdout }}/docker.sock"

@@ -41,12 +41,16 @@ main() {
     exit 0
   fi
 
+  if [[ -z "${ISO_PATH:-}" ]]; then
+    echo "Please pass --iso with the path to the Ubuntu Server ISO."
+    exit 0
+  fi
+
   check_requirements
 
   local server_name="$1"
   shift
 
-  local iso="${HOME}/Downloads/ubuntu-24.04.4-live-server-arm64.iso"
   local cpu=4
   local memory="8GB"
   local disk_size="110GB"

@@ -247,19 +247,3 @@
         IdentitiesOnly yes
   become: true
   become_user: "{{ claude_user }}"
-
-- name: Configure git user name
-  community.general.git_config:
-    name: user.name
-    value: "{{ git_user_name }}"
-    scope: global
-  become: true
-  become_user: "{{ claude_user }}"
-
-- name: Configure git user email
-  community.general.git_config:
-    name: user.email
-    value: "{{ git_user_email }}"
-    scope: global
-  become: true
-  become_user: "{{ claude_user }}"
