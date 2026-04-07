@@ -4,9 +4,13 @@
     _mise_user: "{{ mise_user }}"
 
 - name: Add mise GPG key
-  ansible.builtin.get_url:
-    url: https://mise.jdx.dev/gpg-key.pub
-    dest: /etc/apt/keyrings/mise-archive-keyring.pub
+  ansible.builtin.shell:
+    cmd: curl -fsSL https://mise.jdx.dev/gpg-key.pub | gpg --dearmor -o /etc/apt/keyrings/mise-archive-keyring.gpg
+    creates: /etc/apt/keyrings/mise-archive-keyring.gpg
+
+- name: Set mise GPG key permissions
+  ansible.builtin.file:
+    path: /etc/apt/keyrings/mise-archive-keyring.gpg
     mode: "0644"
 
 - name: Add mise apt repository
@@ -14,7 +18,7 @@
     dest: /etc/apt/sources.list.d/mise.list
     # yamllint disable-line rule:line-length
     content: >-
-      deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.pub
+      deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg
       arch={{ ansible_architecture | regex_replace('aarch64', 'arm64') | regex_replace('x86_64', 'amd64') }}]
       https://mise.jdx.dev/deb stable main
     mode: "0644"

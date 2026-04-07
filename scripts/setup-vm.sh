@@ -40,7 +40,8 @@ main() {
     usage
     exit 0
   fi
-
+  
+  echo "ISO_PATH ${ISO_PATH}"
   if [[ -z "${ISO_PATH:-}" ]]; then
     echo "Please pass --iso with the path to the Ubuntu Server ISO."
     exit 0

@@ -1,6 +1,6 @@
 ---
 - name: Deploy Agent servers
-  hosts: rosie,athena
+  hosts: rosie,athena,asteroid
   become: true
   vars_files:
     - ../vars/common.yml
