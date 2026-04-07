@@ -116,7 +116,7 @@ On first deploy, the hermes role generates an SSH key and prints the public key.
 Then SSH in and complete interactive setup:
 
 ```bash
-make connect_hermes HOST=rosie
+make connect_hermes HOST=my-agent
 # Inside the tmux session:
 hermes setup          # Authenticate with Nous Portal (OAuth)
 hermes model          # Select AI model
@@ -162,8 +162,8 @@ Set integration type to **Guild Install**, copy the generated URL, and add the b
 **d. Deploy and configure**
 
 ```bash
-make deploy HOST=rosie
-make connect_hermes HOST=rosie
+make deploy HOST=my-agent
+make connect_hermes HOST=my-agent
 # Inside the tmux session:
 hermes gateway setup   # Configure Discord platform
 hermes gateway start
