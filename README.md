@@ -5,7 +5,7 @@
 ## Requirements
 
 - [Python 3](https://www.python.org/)
-- [lume](https://github.com/trycua/lume) (macOS VM manager)
+- [Homebrew](https://brew.sh/) (macOS — used to install [lume](https://github.com/trycua/lume) via the bundled `Brewfile`)
 - [Ubuntu Server ARM64 ISO](https://ubuntu.com/download/server/arm)
 
 ## Getting Started
@@ -24,6 +24,8 @@ This runs `scripts/setup-vm.sh` which creates the lume VM and boots the Ubuntu i
 ```bash
 make install
 ```
+
+This runs `brew bundle` (installing `lume` from the `Brewfile`), creates a Python virtualenv, and installs the Ansible collections listed in `collections/requirements.yml`.
 
 ### 3. Configure secrets
 
@@ -47,7 +49,7 @@ On first deploy, the hermes role generates an SSH key and prints the public key.
 Then SSH in and complete interactive setup:
 
 ```bash
-make connect HOST=rosie
+make connect_hermes HOST=rosie
 # Inside the tmux session:
 hermes setup          # Authenticate with Nous Portal (OAuth)
 hermes model          # Select AI model
@@ -94,7 +96,7 @@ Set integration type to **Guild Install**, copy the generated URL, and add the b
 
 ```bash
 make deploy HOST=rosie
-make connect HOST=rosie
+make connect_hermes HOST=rosie
 # Inside the tmux session:
 hermes gateway setup   # Configure Discord platform
 hermes gateway start
@@ -114,7 +116,7 @@ hermes gateway start
 | `make encrypt` | Encrypt the vault file |
 | `make decrypt` | Decrypt the vault file |
 | `make start HOST=<name>` | Start a VM |
-| `make connect HOST=<name>` | SSH into a host as hermes user in tmux |
+| `make connect_hermes HOST=<name>` | SSH into a host as hermes user in tmux |
 
 ## Architecture
 

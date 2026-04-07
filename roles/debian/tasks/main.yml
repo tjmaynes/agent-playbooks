@@ -23,6 +23,7 @@
       - vim
       - tmux
       - htop
+      - pandoc
     state: present
     update_cache: true
 

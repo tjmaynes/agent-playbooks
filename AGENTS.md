@@ -25,6 +25,8 @@ vars/
 inventory/hosts.yml       # Host definitions with per-host variables
 scripts/
   setup-vm.sh             # Idempotent lume VM creation script
+Brewfile                  # Homebrew dependencies (lume) — installed by `make install`
+Makefile                  # Entry-point targets (install, setup_*, deploy, connect_hermes, ...)
 ```
 
 ## Key conventions
@@ -45,6 +47,8 @@ scripts/
 - VM creation via `scripts/setup-vm.sh` is idempotent — skips if VM already exists
 - Named setup targets: `make setup_rosie` (4GB RAM, 60GB disk), `make setup_athena` (8GB RAM, 110GB disk)
 - Generic setup: `make setup HOST=<name>` creates a VM with default 8GB RAM / 110GB disk
+- `make install` runs `brew bundle` (to install `lume` from the `Brewfile`) before creating the Python venv and installing Ansible collections
+- SSH into a deployed host as the hermes service user with `make connect_hermes HOST=<name>` (opens a tmux session)
 
 ## Secrets
 
